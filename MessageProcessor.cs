@@ -73,7 +73,7 @@ internal class MessageProcessor : IMessageProcessor
                 }
                 // TODO: Call API to save claimant score and BYE date
                 // TODO: Call API to create RESEA 1-1 event
-
+            }
             // return ProcessingStatus.Success;
             return ProcessingStatus.Unprocessable;
         }
@@ -82,7 +82,6 @@ internal class MessageProcessor : IMessageProcessor
             _logger.LogError($"Unable to process message.", ex);
             return ProcessingStatus.Unprocessable;
         }
-
     }
 
     private IList<int> CallSeekerMatching(ReseaNotification notification)
