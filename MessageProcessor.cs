@@ -1,18 +1,14 @@
 
-using System.Data;
-using System.Data.Common;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
-using System.Net.Mime;
-using System.Security.Principal;
-using System.Text;
-using Microsoft.VisualBasic;
-using Newtonsoft.Json;
+using Amazon.Runtime.Internal.Util;
 using Newtonsoft.Json.Linq;
+using Microsoft.Extensions.Logging;
 
 internal class MessageProcessor : IMessageProcessor
 {
+    private readonly ILogger<IMessageProcessor>  _logger;
     private const int MI_CHANNELID = 11211;
     private const string seekerMatchingApiUrl = "https://internal-services.lexus.monster.com/seeker/api/v1/seeker-matching";
     private HttpClient client = new HttpClient();
@@ -37,6 +33,11 @@ internal class MessageProcessor : IMessageProcessor
     private const int EMAILADDRESS_OFFSET = 104;
 #endregion
 
+    public MessageProcessor(ILogger<IMessageProcessor> logger)
+    {
+        _logger = logger;
+    }
+
     public ProcessingStatus Process(string message)
     {
         // TODO: Set up logging/log file
@@ -57,29 +58,31 @@ internal class MessageProcessor : IMessageProcessor
             var userIds = CallSeekerMatching(reseaNotification);
             if (userIds.Count() > 1)
             {
-                // 200 = OK
-                // Log multi-match error
+                _logger.LogInformation($"Multiple matches found {userIds.Count}: {userIds.Select(x=>x.ToString())}");
             }
+            else
+            {
+                if (userIds.Count() == 1)
+                {
+                    _logger.LogInformation($"Matched seeker: {userIds[0]}");
+                    // what should we update??
+                }
+                else
+                {
+                    // TODO: Call API to Create Seeker
+                }
+                // TODO: Call API to save claimant score and BYE date
+                // TODO: Call API to create RESEA 1-1 event
 
-            // Based on matching status: create or update
-            // 401 NotFound = 
-            if (userIds.Count == 0)
-            {
-                // CreateSeekerCreate
-            }
-            if (userIds.Count == 1)
-            {
-                // what should we update??
-            }
             // return ProcessingStatus.Success;
+            return ProcessingStatus.Unprocessable;
         }
         catch(Exception ex)
         {
-            // TODO: log any exception
+            _logger.LogError($"Unable to process message.", ex);
             return ProcessingStatus.Unprocessable;
         }
 
-        return ProcessingStatus.Unprocessable;
     }
 
     private IList<int> CallSeekerMatching(ReseaNotification notification)
@@ -97,14 +100,9 @@ internal class MessageProcessor : IMessageProcessor
             EmailAddress = "" // email address field must be passed as empty
         });
         HttpResponseMessage response = client.SendAsync(request).Result;
-        if (response.StatusCode == HttpStatusCode.NotFound || response.StatusCode == HttpStatusCode.Conflict)
+        _logger.LogInformation($"SeekerMatching response: {response.StatusCode}");
+        if (response.StatusCode == HttpStatusCode.OK)
         {
-            // no match found
-            // how to handle 
-        }
-        else if (response.StatusCode == HttpStatusCode.OK)
-        {
-            // var userIds = (SeekerMatchingResult)JsonConvert.DeserializeObject(response.Content.ReadAsStringAsync().Result);
             // return userIds;
             dynamic stuff = JObject.Parse(response.Content.ReadAsStringAsync().Result);
             var userIds = new List<int>(stuff.userIds.Count);
@@ -113,6 +111,13 @@ internal class MessageProcessor : IMessageProcessor
                 userIds.Add(userId);
             }
             return userIds;
+        }
+        else if (response.StatusCode == HttpStatusCode.NotFound || response.StatusCode == HttpStatusCode.Conflict)
+        {
+            // 200 ok
+            // 401 no match found
+            // 409 conflict
+            _logger.LogInformation($"Seeker matching response {response.StatusCode}");
         }
         return new List<int>();
     }

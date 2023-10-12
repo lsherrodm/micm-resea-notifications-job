@@ -48,10 +48,16 @@ public class SqsMessageHandler : IMessageQueueHandler
                 RegionEndpoint = RegionEndpoint.USEast1
             };
 
+#if (DEBUG)
+            using (var sqsClient = new AmazonSQSClient(amazonSQSConfig))
+#elif (RELEASE)
             var credentials = AssumeRoleWithWebIdentityCredentials.FromEnvironmentVariables();
+            using (var sqsClient = new amazonSQSConfig(credentials, amazonSQSConfig))
+#endif
 
-            _logger.LogInformation($"credentials {JsonSerializer.Serialize(credentials)}");
-            using (var sqsClient = new AmazonSQSClient(credentials, amazonSQSConfig))
+
+            // _logger.LogInformation($"credentials {JsonSerializer.Serialize(sqsClient)}");
+            // using (var sqsClient = new AmazonSQSClient(credentials, amazonSQSConfig))
             {
                 _logger.LogInformation($"Job {JsonSerializer.Serialize(sqsClient)}");
                 ReceiveMessageResponse messageResponse;
